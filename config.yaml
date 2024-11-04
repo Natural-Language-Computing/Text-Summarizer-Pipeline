@@ -1,0 +1,5 @@
+chunk_size: 2048
+max_length: 1024
+model_name: mixtral-8x7b-32768
+overlap: 200
+temperature: 0.7
