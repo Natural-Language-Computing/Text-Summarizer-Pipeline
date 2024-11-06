@@ -1,0 +1,6 @@
+PyMuPDF
+torch
+dspy
+groq
+transformers
+python-dotenv
