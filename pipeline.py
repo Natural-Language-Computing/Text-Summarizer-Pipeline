@@ -3,8 +3,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-import dspy
-import fitz  # PyMuPDF
+import pymupdf4llm
 import yaml
 from dotenv import load_dotenv
 from groq import Groq
@@ -38,13 +37,10 @@ class PDFProcessor:
         self.overlap = overlap
 
     def read_pdf(self, file_path: str) -> str:
-        """Extract text from PDF file"""
+        """Extract text from PDF file using pymupdf4llm and convert it to Markdown."""
         try:
-            with fitz.open(file_path) as doc:
-                text: str = ""
-                for page in doc:
-                    text += page.get_text()  # type: ignore
-                return text
+            text = pymupdf4llm.to_markdown(file_path)
+            return text
 
         except Exception as e:
             logger.error(f"Error reading PDF: {e}")
@@ -71,19 +67,17 @@ class SummarizationModule:
         self.config = config
         self.client = Groq(api_key=config.api_key)
 
-        dspy.settings.configure(lm=self.client)
-
     def generate_prompt(self, text: str, query: Optional[str] = None) -> str:
         """Generate context-aware prompt"""
 
         if query:
-            return f""" {query} Text: {text} """
+            return f"{query} Text: {text}"
 
         else:
             return f"""Please provide a comprehensive summary of the following text, highlighting the key points and main ideas: Text: {text} Summary: """
 
     def summarize_chunk(self, chunk: str, query: Optional[str] = None) -> str:
-        """Summarize a single chunk of text, incorporating feedback and evaluating summary quality"""
+        """Summarize a single chunk of text"""
 
         try:
             prompt = self.generate_prompt(chunk, query)

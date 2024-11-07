@@ -4,3 +4,4 @@ dspy
 groq
 transformers
 python-dotenv
+pymupdf4llm
