@@ -1,3 +1,5 @@
 .env
 .devenv
 .pre-commit-config.yaml
+.ruff_cache
+__pycache__
