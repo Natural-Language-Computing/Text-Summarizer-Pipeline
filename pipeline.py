@@ -66,7 +66,6 @@ class SummarizationModule:
         self.config = config
         self.client = Groq(api_key=config.api_key)
         
-        # Initialize DSPy for prompt tuning
         dspy.settings.configure(lm=self.client)
         
     def generate_prompt(self, text: str, query: str = None) -> str:
@@ -78,14 +77,12 @@ class SummarizationModule:
     
     def evaluate_summary(self, generated_summary: str, expected_criteria: str) -> bool:
         """Evaluate the generated summary against some criteria (e.g., completeness, relevance)"""
-        # Example logic for evaluating summary
         if expected_criteria in generated_summary:
             return True
         return False
 
     def tune_prompt(self, prompt: str, feedback: str, generated_summary: str, expected_criteria: str) -> str:
         """Tuning the prompt based on feedback and evaluation of the generated summary"""
-        # Evaluate the quality of the summary
         summary_is_good = self.evaluate_summary(generated_summary, expected_criteria)
         
         if not summary_is_good:
@@ -102,7 +99,6 @@ class SummarizationModule:
         try:
             prompt = self.generate_prompt(chunk, query)
             if feedback and expected_criteria:
-                # Apply feedback and evaluate summary quality
                 prompt = self.tune_prompt(prompt, feedback, "", expected_criteria)
             
             response = self.client.chat.completions.create(
@@ -139,22 +135,18 @@ class SummarizationPipeline:
         """Process PDF and generate summary"""
         
         try:
-            # Extract text from PDF
             logger.info("Extracting text from PDF...")
             text = self.pdf_processor.read_pdf(pdf_path)
             
-            # Split into chunks
             chunks = self.pdf_processor.chunk_text(text)
             logger.info(f"Split text into {len(chunks)} chunks")
             
-            # Generate summaries for each chunk
             chunk_summaries = []
             for i, chunk in enumerate(chunks):
                 logger.info(f"Processing chunk {i+1}/{len(chunks)}")
                 summary = self.summarizer.summarize_chunk(chunk, query, feedback, expected_criteria)
                 chunk_summaries.append(summary)
                 
-            # Combine chunk summaries into final summary
             final_answer = self.summarizer.summarize_chunk(" ".join(chunk_summaries), query, feedback, expected_criteria)
             
             return {
