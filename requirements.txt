@@ -1,7 +1,8 @@
 PyMuPDF
 torch
-dspy
+dspy-ai
 groq
 transformers
 python-dotenv
 pymupdf4llm
+llama-index
