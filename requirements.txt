@@ -1,5 +1,4 @@
 PyMuPDF
-torch
 dspy-ai
 groq
 transformers
