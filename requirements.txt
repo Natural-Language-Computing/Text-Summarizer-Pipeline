@@ -4,3 +4,4 @@ python-dotenv
 pymupdf4llm
 llama-index
 textgrad
+streamlit
