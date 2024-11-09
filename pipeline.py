@@ -1,30 +1,26 @@
-import logging
-import os
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
-import dspy
-import pymupdf4llm
-import yaml
-from dotenv import load_dotenv
+import os, logging, pymupdf4llm
+import textgrad as tg
 from groq import Groq
+from typing import Any, Dict, List, Optional
+from dotenv import load_dotenv
+import time  
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Loading GROQ_API_KEY from .env file
 load_dotenv()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 assert GROQ_API_KEY, "Please set the GROQ_API_KEY environment variable"
 
-
-@dataclass
 class PipelineConfig:
     """Configuration for the summarization pipeline"""
 
-    model_name: str = "llama3-70b-8192"
+    model_name: str = "llama-3.2-90b-text-preview"
     temperature: float = 0.7
     api_key: str = GROQ_API_KEY
-
 
 class PDFProcessor:
     """Handles PDF reading and text extraction"""
@@ -35,120 +31,79 @@ class PDFProcessor:
         try:
             llama_reader = pymupdf4llm.LlamaMarkdownReader()
             doc = llama_reader.load_data(file_path)
+
             return doc
 
         except Exception as e:
             logger.error(f"Error reading PDF: {e}")
             raise
 
-    def chunk_text(doc: list) -> List[str]:
-        """Getting the text from the document of Llama Index format"""
-
-        chunks = [page.text for page in doc]
-        return chunks
-
-class SummarizationModule:
-    """Handles text summarization using Groq"""
-
-    def __init__(self, config: PipelineConfig):
-        self.config = config
-        self.client = Groq(api_key=config.api_key)
-        dspy.settings.configure(lm = self.client)
-
-    def generate_prompt(self, text: str, query: Optional[str] = None) -> str:
-        """Generate context-aware prompt"""
-
-        if query:
-            return f"{query} Text: {text}"
-
-        else:
-            return f"""Please provide a comprehensive summary of the following text, highlighting the key points and main ideas: Text: {text} Summary: """
-
-    def summarize_chunk(self, chunk: str, query: Optional[str] = None) -> str:
-        """Summarize a single chunk of text"""
-
-        try:
-            prompt = self.generate_prompt(chunk, query)
-
-            response = self.client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                model=self.config.model_name,
-                temperature=self.config.temperature,
-            )
-            output = response.choices[0].message.content
-            if not output:
-                raise ValueError("No output from the model")
-            return output
-
-        except Exception as e:
-            logger.error(f"Error in summarization: {e}")
-            raise
-
-
 class SummarizationPipeline:
     """End-to-end pipeline for PDF summarization"""
 
-    def __init__(self, config_path: str):
-        self.config = (self._load_config(config_path) if config_path else PipelineConfig())
+    def __init__(self):
+        self.config = PipelineConfig
+        self.client = Groq(api_key = self.config.api_key)
         self.pdf_processor = PDFProcessor
-        self.summarizer = SummarizationModule(self.config)
-
-    def _load_config(self, config_path: str) -> PipelineConfig:
-        """Load configuration from YAML file"""
-
-        with open(config_path, "r") as f:
-            config_dict = yaml.safe_load(f)
-
-        return PipelineConfig(**config_dict)
-
-    def process(self, pdf_path: str, query: str, expected_keyword: str) -> Dict[str, Any]:
-        """Process PDF and generate summary"""
-
+    
+    def process(self, file_path: str) -> str:
         try:
-            logger.info("Extracting text from PDF...")
-            doc = self.pdf_processor.read_pdf(pdf_path)
-            chunks = self.pdf_processor.chunk_text(doc)
-            logger.info(f"Split text into {len(chunks)} chunks")
+            llm = tg.get_engine(f"groq-{self.config.model_name}")
+            tg.set_backward_engine(tg.get_engine("groq-llama-3.2-11b-text-preview"), override = True)
+            model = tg.BlackboxLLM(llm)
+
+            doc = self.pdf_processor.read_pdf(file_path)
 
             chunk_summaries = []
-            for i, chunk in enumerate(chunks):
-                logger.info(f"Processing chunk {i+1}/{len(chunks)}")
-                summary = self.summarizer.summarize_chunk(chunk)
-                chunk_summaries.append(summary)
+            for page in doc:
+                text = page.text
 
-            final_prompt = f"{query}. Expected keywords: {expected_keyword}"
-            final_answer = self.summarizer.summarize_chunk(" ".join(chunk_summaries), final_prompt)
+                system_prompt = tg.Variable(value = f"Here's a financial document. Provide a concise summary highlighting key takeaways. \nText: {text}" , requires_grad = True, role_description="system_prompt")
 
-            return {
-                "answer": final_answer,
-                "chunk_summaries": chunk_summaries,
-                "num_chunks": len(chunks),
-            }
+                evaluation_instr = f"""If nothing is important (like header, footer, introduction, title page, etc.) than just output "No important information found".
+                Else, highlight the important information in key points strictly at max 5.
+                Do not add any additional information apart from what is written in the text. Text: {text}\n
+                """
+
+                answer = model(system_prompt)
+                optimizer = tg.TGD(parameters = [answer])
+
+                time.sleep(3)
+                loss_fn = tg.TextLoss(evaluation_instr)
+                loss = loss_fn(answer)
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+
+                chunk_summaries.append(answer)
+                
+                time.sleep(3)  # Add a 2-second delay so as to avoid "Too Many Requests" error from the API
+            
+            # Now we find summary of all the chunks together
+            text = " ".join([chunk.value for chunk in chunk_summaries])
+            system_prompt = tg.Variable(value = f"Here's a financial document. Provide a concise summary highlighting key takeaways.\nText: {text}" , requires_grad = True, role_description="system_prompt")
+
+            evaluation_instr = f"""Provide a concise summary of the document. Be very careful to not exclude the most important information and provide correct statistical data. Keep the summary in specific points and do not add any additional information not given in the text. """
+
+            final_answer = model(system_prompt)
+            optimizer = tg.TGD(parameters = [final_answer])
+
+            loss_fn = tg.TextLoss(evaluation_instr)
+            loss = loss_fn(final_answer)
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+            return final_answer.value
 
         except Exception as e:
-            logger.error(f"Pipeline error: {e}")
+            logger.error(f"Error processing PDF: {e}")
             raise
 
 
 def main():
-    # Example usage
-    config = {
-        "model_name": "llama3-70b-8192",
-        "temperature": 0.7,
-    }
+    pipeline = SummarizationPipeline()
+    answer = pipeline.process(input("Enter the path of the PDF file: "))
+    logger.info(f"Summary: \n{answer}")
 
-    with open("config.yaml", "w") as f:
-        yaml.dump(config, f)
-
-    pipeline = SummarizationPipeline("config.yaml")
-    result = pipeline.process(
-        input("Enter PDF file path: "),
-        query=input("Enter your query: "),
-        expected_keyword=input("Enter expected keywords required: "),
-    )
-
-    print(f"\n{result['answer']}")
-
-
-if __name__ == "__main__":
-    main()
+main()
