@@ -1,7 +1,7 @@
-PyMuPDF
-dspy-ai
+pymupdf
 groq
-transformers
 python-dotenv
 pymupdf4llm
 llama-index
+textgrad
+streamlit
