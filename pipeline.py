@@ -17,7 +17,6 @@ load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 assert GROQ_API_KEY, "Please set the GROQ_API_KEY environment variable"
 
-
 class PipelineConfig:
     """Configuration for the summarization pipeline"""
 
@@ -30,16 +29,16 @@ class PipelineConfig:
         "llama3-8b-8192",
         "mixtral-8x7b-32768",
     ]
-    temperature: float = 0.7
+    temperature: float = 0.5
     api_key: str = GROQ_API_KEY
-
 
 class PDFProcessor:
     """Handles PDF reading and text extraction"""
 
-    @staticmethod
+    @staticmethod   # Because this method does not require any instance of the class to be created. It can be called using the class name itself
     def read_pdf(file_path: str) -> List[str]:
         """Extract text from PDF file using pymupdf4llm."""
+
         try:
             llama_reader = pymupdf4llm.LlamaMarkdownReader()
             doc = llama_reader.load_data(file_path)
@@ -48,21 +47,23 @@ class PDFProcessor:
             logger.error(f"Error reading PDF: {e}")
             raise
 
-
 class SummarizationPipeline:
     """End-to-end pipeline for PDF summarization"""
 
     def __init__(self):
-        self.config = PipelineConfig()
-        # self.model = self.initialize_model()
-        self.model_no = 0
+        self.config = PipelineConfig() # Creating an instance of the PipelineConfig class
+        self.model_no = 0 # This is basically to get faster results by using different models
 
     def initialize_model(self):
-        llm = tg.get_engine(f"groq-{self.config.model_name[self.model_no]}")
-        tg.set_backward_engine(llm, override=True)
+        """Initialize the text generation model"""
+
+        llm = tg.get_engine(f"groq-{self.config.model_name[self.model_no]}") # Initializing the model for forward pass
+        tg.set_backward_engine(llm, override=True) # Initializing the model for backward pass
         return tg.BlackboxLLM(llm)
 
     def retry_with_backoff(self, func, *args, **kwargs):
+        """Retry a function with exponential backoff in case of failure"""
+
         backoff_time = 5
         max_backoff_time = 60
         while True:
@@ -76,6 +77,8 @@ class SummarizationPipeline:
                 )
 
     def process_batch(self, batch_text: str) -> tg.Variable:
+        """Process a batch of text and generate a summary"""
+
         system_prompt = tg.Variable(
             value=f"Here's a financial document. Provide a concise summary highlighting key takeaways. \nText: {batch_text}",
             requires_grad=True,
@@ -91,6 +94,8 @@ class SummarizationPipeline:
         return answer
 
     def optimize_answer(self, answer: tg.Variable, evaluation_instr: str):
+        """Optimize the generated answer using gradient descent"""
+
         optimizer = tg.TGD(parameters=[answer])
         loss_fn = tg.TextLoss(evaluation_instr)
         loss = loss_fn(answer)
@@ -99,6 +104,7 @@ class SummarizationPipeline:
         optimizer.zero_grad()
 
     def process(self, file_path: str) -> str:
+        """Process the entire PDF and generate a summary"""
         try:
             with st.spinner("Reading and processing PDF..."):
                 pages = PDFProcessor.read_pdf(file_path)
@@ -126,6 +132,7 @@ class SummarizationPipeline:
             raise
 
     def summarize_document(self, text: str) -> tg.Variable:
+        """Generate a final summary for the entire document"""
         system_prompt = tg.Variable(
             value=f"Here's a financial document. Provide a concise summary highlighting key takeaways.\nText: {text}",
             requires_grad=True,
@@ -140,8 +147,9 @@ class SummarizationPipeline:
         self.optimize_answer(final_answer, evaluation_instr)
         return final_answer
 
-
 def main():
+    """Main function to run the model in Streamlit"""
+
     st.title("PDF Summarization Tool")
     st.write("Upload a PDF file to generate a summary of its contents.")
 
@@ -165,7 +173,6 @@ def main():
             # Cleanup temporary file
             if os.path.exists(temp_path):
                 os.remove(temp_path)
-
 
 if __name__ == "__main__":
     main()

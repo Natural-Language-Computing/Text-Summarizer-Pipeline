@@ -1,10 +1,10 @@
 # Text Summarizer Pipeline
 
-This is Project made with the help of Groq.
+This is Project made with the help of Groq and TextGrad.
 
 ## Running project locally
 
-### Method 1 - Using Nix (Recommended)
+### Method 1 - Using Nix (For UNIX based systems)
 
 Make sure you have the [Nix package manager](https://nixos.org/download/) installed.
 
@@ -69,7 +69,7 @@ python3 -m venv venv
 
 ```bash
 # On Windows
-venv\Scripts\activate
+venv\Scripts\Activate.ps1
 
 # On Linux or macOS
 source venv/bin/activate
