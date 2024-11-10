@@ -6,7 +6,7 @@ This is Project made with the help of Groq and TextGrad.
 
 ### Method 1 - Using Nix (For UNIX based systems)
 
-Make sure you have the [Nix package manager](https://nixos.org/download/) installed.
+Make sure you have the [Nix package manager](https://nixos.org/download/) and Git installed.
 
 1. Clone the repository
 
