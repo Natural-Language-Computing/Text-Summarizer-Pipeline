@@ -21,7 +21,7 @@ assert GROQ_API_KEY, "Please set the GROQ_API_KEY environment variable"
 class PipelineConfig:
     """Configuration for the summarization pipeline"""
 
-    model_name: str = "llama-3.1-8b-instant"
+    model_name: list = ["gemma-7b-it", "gemma2-9b-it", "llama-3.1-70b-versatile", "llama-3.1-8b-instant", "llama-3.2-11b-text-preview", "llama3-8b-8192", "mixtral-8x7b-32768"]
     temperature: float = 0.7
     api_key: str = GROQ_API_KEY
 
@@ -46,12 +46,13 @@ class SummarizationPipeline:
 
     def __init__(self):
         self.config = PipelineConfig()
-        self.model = self.initialize_model()
+        # self.model = self.initialize_model()
+        self.model_no = 0
 
     def initialize_model(self):
-        llm = tg.get_engine(f"groq-{self.config.model_name}")
+        llm = tg.get_engine(f"groq-{self.config.model_name[self.model_no]}")
         tg.set_backward_engine(
-            tg.get_engine(f"groq-{self.config.model_name}"), override=True
+            llm, override=True
         )
         return tg.BlackboxLLM(llm)
 
@@ -77,10 +78,9 @@ class SummarizationPipeline:
         evaluation_instr = (
             "If nothing is important (like header, footer, introduction, title page, etc.) "
             "then just output 'No important information found'. Else, highlight the important "
-            "information in key points strictly at max 5. Do not add any additional information "
-            "apart from what is written in the text."
+            "information in key points. Do not add any additional information "
         )
-        answer = self.retry_with_backoff(self.model, system_prompt)
+        answer = self.retry_with_backoff(self.initialize_model(), system_prompt)
         self.optimize_answer(answer, evaluation_instr)
         return answer
 
@@ -97,7 +97,7 @@ class SummarizationPipeline:
             with st.spinner("Reading and processing PDF..."):
                 pages = PDFProcessor.read_pdf(file_path)
                 # Combine pages into batches
-                batch_size = 7
+                batch_size = 5
                 batches = [
                     " ".join(pages[i : i + batch_size])
                     for i in range(0, len(pages), batch_size)
@@ -108,6 +108,8 @@ class SummarizationPipeline:
                 for i, batch in enumerate(batches):
                     batch_summaries.append(self.process_batch(batch))
                     progress_bar.progress((i + 1) / len(batches))
+                    self.model_no += 1
+                    self.model_no %= (len(self.config.model_name) - 1)
 
                 combined_text = " ".join([batch.value for batch in batch_summaries])
                 final_summary = self.summarize_document(combined_text)
@@ -128,7 +130,7 @@ class SummarizationPipeline:
             "important information and provide correct statistical data. Keep the summary in specific "
             "points and do not add any additional information not given in the text."
         )
-        final_answer = self.retry_with_backoff(self.model, system_prompt)
+        final_answer = self.retry_with_backoff(self.initialize_model(), system_prompt)
         self.optimize_answer(final_answer, evaluation_instr)
         return final_answer
 
