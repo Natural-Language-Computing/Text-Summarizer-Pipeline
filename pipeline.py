@@ -21,7 +21,15 @@ assert GROQ_API_KEY, "Please set the GROQ_API_KEY environment variable"
 class PipelineConfig:
     """Configuration for the summarization pipeline"""
 
-    model_name: list = ["gemma-7b-it", "gemma2-9b-it", "llama-3.1-70b-versatile", "llama-3.1-8b-instant", "llama-3.2-11b-text-preview", "llama3-8b-8192", "mixtral-8x7b-32768"]
+    model_name: list = [
+        "gemma-7b-it",
+        "gemma2-9b-it",
+        "llama-3.1-70b-versatile",
+        "llama-3.1-8b-instant",
+        "llama-3.2-11b-text-preview",
+        "llama3-8b-8192",
+        "mixtral-8x7b-32768",
+    ]
     temperature: float = 0.7
     api_key: str = GROQ_API_KEY
 
@@ -51,9 +59,7 @@ class SummarizationPipeline:
 
     def initialize_model(self):
         llm = tg.get_engine(f"groq-{self.config.model_name[self.model_no]}")
-        tg.set_backward_engine(
-            llm, override=True
-        )
+        tg.set_backward_engine(llm, override=True)
         return tg.BlackboxLLM(llm)
 
     def retry_with_backoff(self, func, *args, **kwargs):
@@ -109,7 +115,7 @@ class SummarizationPipeline:
                     batch_summaries.append(self.process_batch(batch))
                     progress_bar.progress((i + 1) / len(batches))
                     self.model_no += 1
-                    self.model_no %= (len(self.config.model_name) - 1)
+                    self.model_no %= len(self.config.model_name) - 1
 
                 combined_text = " ".join([batch.value for batch in batch_summaries])
                 final_summary = self.summarize_document(combined_text)
